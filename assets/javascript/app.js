@@ -12,7 +12,7 @@ app.use(express.json())
 app.use(cors())
 const mongoClient = new MongoClient(process.env.MONGO_URI)
 
-let db;
+let db
 mongoClient.connect().then(() => {
     db = mongoClient.db('batepapouol')
 })
@@ -36,7 +36,7 @@ app.post('/participants', async (req, res) => {
     if (validation.error) {
         res.status(422).send(validation.error.details[0].message)
         return
-    };
+    }
 
     try {
 
@@ -87,10 +87,10 @@ const messageSchema = joi.object({
 
 //POST - Messages
 app.post('/messages', async (req, res) => {
-    const { to: to, text: text, type: type } = req.body;
-    const user = req.headers.user;
+    const { to: to, text: text, type: type } = req.body
+    const user = req.headers.user
 
-    const validation = messageSchema.validate({ to, text, type },);
+    const validation = messageSchema.validate({ to, text, type },)
 
     if (validation.error) {
         res.status(422).send(validation.error.details[0].message)
@@ -104,8 +104,8 @@ app.post('/messages', async (req, res) => {
             text: text,
             type: type,
             time: dayjs().format('HH:mm:ss')
-        });
-        return res.sendStatus(201);
+        })
+        return res.sendStatus(201)
     } catch (error) {
         console.log(error)
         res.sendStatus(500)
@@ -115,12 +115,22 @@ app.post('/messages', async (req, res) => {
 //GET - Messages
 
 app.get('/messages', async (req, res) => {
-    const user = req.headers.user;
-    const limit = parseInt(req.query.limit);
+    const user = req.headers.user
+    const limit = parseInt(req.query.limit)
+
+    const query = {
+        $or:[
+        {type: 'message'},
+        {type: 'status'},
+        {from: user},
+        {to: user},
+        {to: 'Todos'}
+    ]}
+
 
     try {
-        const getMessages = await db.collection('messages').find().toArray();
-        const controlMsg = getMessages.filter((message) => message.type === 'message' || message.to === user || message.from === user)
+        const controlMsg = await db.collection('messages').find(query).toArray()
+    
         if (limit === false) {
             res.send(controlMsg)
         } else {
@@ -136,12 +146,12 @@ app.get('/messages', async (req, res) => {
 //POST - Server
 
 app.post('/status', async (req, res) => {
-    const user = req.headers.user;
+    const user = req.headers.user
 
     try {
         const finder = await db.collection('participants').findOne({ 'name': user })
         if (finder === null) {
-            return res.sendStatus(404);
+            return res.sendStatus(404)
         } else {
             await db.collection('participants').updateOne(
                 { 'name': user },
@@ -155,10 +165,28 @@ app.post('/status', async (req, res) => {
 
 //Remove inatives
 
-// function RemoveInative() {
-    
-// }
+setInterval( async () =>{
+    const tenSeconds = Date.now() - 10000
+    const query = {lastStatus: {$lt: tenSeconds}}
 
-// RemoveInative()
+    try {   
+        const participants = await db.collection('participants').find(query).toArray()
+       
+
+        participants.forEach( async (participant) => {
+            await db.collection('messages').insertOne({
+                from: participant.name, 
+                to: 'Todos', 
+                text: 'sai da sala...', 
+                type: 'status', 
+                time: dayjs().format('HH:mm:ss')
+            })
+        });
+        await db.collection('participants').deleteMany(query)
+
+    } catch (error) {
+        console.log(error)
+    }
+}, 5000)
 
 app.listen(5000, () => console.log('Ok, route 5000!'))
